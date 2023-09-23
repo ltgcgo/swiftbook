@@ -1,0 +1,15 @@
+[book]
+authors = ["John Mastodon"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Example mdBook"
+description = "Build mdBook, fast."
+
+[build]
+build-dir = "book"
+
+[output.html]
+site-url = "/"
+default-theme = "coal"
+preferred-dark-theme = "ayu"
