@@ -48,7 +48,8 @@ jobs:
           artifacts: "pages-build.tar.gz,pages-build-gz.tar,pages-build-br.tar,build-time.txt"
           allowUpdates: true
           artifactErrorsFailBuild: true
-          makeLatest: true
+          makeLatest: false
+          prerelease: true
           removeArtifacts: true
           replacesArtifacts: true
           name: "Latest page build"
