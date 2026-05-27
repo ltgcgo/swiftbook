@@ -1,59 +1,136 @@
 #!/bin/bash
 COMPRESS_CRIT="\.(ass|atom|bin|bm|bmp|conf|css|csv|htm|html|ico|js|json|kar|list|lrc|lst|map|md|mid|mjs|mod|mts|otf|rss|sbv|srt|ssa|svg|trc|ts|tsv|ttf|ttml|txt|vgm|vtt|wasm|webmanifest|xml|ytt)$"
+
+#if [ ! -f "$(which zopfli)" ]; then
+	#sudo apt install -y zopfli
+#fi
+#if [ ! -f "$(which tree)" ]; then
+	#sudo apt install -y tree
+#fi
+
 rm -v 'book/FontAwesome/fonts/fontawesome-webfont.eot' 'book/FontAwesome/fonts/fontawesome-webfont.ttf'
+
 echo "$(date +"%s")" > build-time.txt
-cp -r book book-gz
-cp -r book book-br
-cp -r book book-base
-cd book
-tar cvf ../pages-build.tar *
+cp -Lr book book-raw
+cd book-raw
+printf "" > ../fileHashes.tsv
+find . -type f | while IFS= read -r file; do
+	if [ -f "$file" ]; then
+		# Is a file
+		fileHash="$(sha256sum "${file}" | cut -d' ' -f1)"
+		findResult="$(grep -F "${fileHash}	" ../fileHashes.tsv | cut -d '	' -f2)"
+		if [ "$findResult" != "" ] ; then
+			pathDiffRaw="$(realpath -Lsm --relative-to="${file}" "${findResult}")"
+			pathDiff="${pathDiffRaw/\.\.\//}"
+			echo "Deduplicated: ${file} -> ${pathDiff}"
+			rm "${file}"
+			ln -s "${pathDiff}" "${file}"
+		else
+			echo "${fileHash}	$(realpath -s "${file}")" >> ../fileHashes.tsv
+		fi
+	fi
+done
+tar cf ../pages-build.tar .
+echo "Built uncompressed files: $(wc -c ../pages-build.tar | cut -d' ' -f1) B"
 cd ..
 #zopfli --i1 -v pages-build.tar
 gzip -9v pages-build.tar
-rm -v pages-build.tar
-cd book-gz
-tree -ifl | while IFS= read -r file; do
-	if [ -f "$file" ]; then
-		# Is a file
-		if [ "$(echo "$file" | grep -E "$COMPRESS_CRIT")" != "" ]; then
-			gzip -v9 "$file" #&& echo "Compressed \"${file}\" with Zopfli."
-		else
-			echo "File \"${file}\" cannot be compressed."
-		fi
-		if [ -f "$file" ]; then
-			rm -v "$file"
-		fi
-	fi
-done
-tar cvf ../pages-build-gz.tar *
-cd ..
-cd book-br
-tree -ifl | while IFS= read -r file; do
-	if [ -f "$file" ]; then
-		# Is a file
-		if [ "$(echo "$file" | grep -E "$COMPRESS_CRIT")" != "" ]; then
-			brotli -v9 "$file"
-		else
-			echo "File \"${file}\" cannot be compressed."
-		fi
-		if [ -f "$file" ]; then
-			rm -v "$file"
-		fi
-	fi
-done
-tar cvf ../pages-build-br.tar *
-cd ..
+rm -v pages-build.tar 2>/dev/null
+rm -r book-raw
+cp -Lr book book-base
 cd book-base
-tree -ifl | while IFS= read -r file; do
+printf "" > ../fileHashes.tsv
+find . -type f | while IFS= read -r file; do
 	if [ -f "$file" ]; then
 		# Is a file
 		if [ "$(echo "$file" | grep -E "$COMPRESS_CRIT")" != "" ]; then
-			rm -v "$file"
+			rm "$file"
 		else
 			echo "File \"${file}\" is preserved."
 		fi
 	fi
 done
-tar cvf ../pages-build-base.tar *
+find . -type d | while IFS= read -r folder; do
+	if [ -d "$folder" ]; then
+		rmdir -p "$folder" 2>/dev/null
+	fi
+done
+tar cf ../pages-build-base.tar .
+echo "Built incompressible files: $(wc -c ../pages-build-base.tar | cut -d' ' -f1) B"
 cd ..
+rm -r book-base
+cp -Lr book book-gz
+cd book-gz
+printf "" > ../fileHashes.tsv
+find . -type f | while IFS= read -r file; do
+	if [ -f "$file" ]; then
+		# Is a file
+		if [ "$(echo "$file" | grep -E "$COMPRESS_CRIT")" != "" ]; then
+			fileHash="$(sha256sum "${file}" | cut -d' ' -f1)"
+			findResult="$(grep -F "${fileHash}	" ../fileHashes.tsv | cut -d '	' -f2)"
+			if [ "$findResult" != "" ] ; then
+				pathDiffRaw="$(realpath -Lsm --relative-to="${file}" "${findResult}")"
+				pathDiff="${pathDiffRaw/\.\.\//}"
+				echo "Deduplicated: ${file}.gz -> ${pathDiff}.gz"
+				ln -s "${pathDiff}.gz" "${file}.gz"
+				rm "$file"
+			else
+				echo "${fileHash}	$(realpath -s "${file}")" >> ../fileHashes.tsv
+				gzip -9 "$file" && echo "Compressed \"${file}\" with Gzip."
+			fi
+		#else
+			#echo "File \"${file}\" cannot be compressed."
+		fi
+		if [ -f "$file" ]; then
+			rm -v "$file"
+		fi
+	fi
+done
+find . -type d | while IFS= read -r folder; do
+	if [ -d "$folder" ]; then
+		rmdir -p "$folder" 2>/dev/null
+	fi
+done
+#cat ../fileHashes.tsv
+tar cf ../pages-build-gz.tar .
+echo "Built precompressed Gzip files: $(wc -c ../pages-build-gz.tar | cut -d' ' -f1) B"
+cd ..
+rm -r book-gz
+cp -Lr book book-br
+cd book-br
+printf "" > ../fileHashes.tsv
+find . -type f | while IFS= read -r file; do
+	if [ -f "$file" ]; then
+		# Is a file
+		if [ "$(echo "$file" | grep -E "$COMPRESS_CRIT")" != "" ]; then
+			fileHash="$(sha256sum "${file}" | cut -d' ' -f1)"
+			findResult="$(grep -F "${fileHash}	" ../fileHashes.tsv | cut -d '	' -f2)"
+			if [ "$findResult" != "" ] ; then
+				pathDiffRaw="$(realpath -Lsm --relative-to="${file}" "${findResult}")"
+				pathDiff="${pathDiffRaw/\.\.\//}"
+				echo "Deduplicated: ${file}.br -> ${pathDiff}.br"
+				ln -s "${pathDiff}.br" "${file}.br"
+				rm "$file"
+			else
+				echo "${fileHash}	$(realpath -s "${file}")" >> ../fileHashes.tsv
+				brotli -v9j "$file"
+			fi
+		#else
+			#echo "File \"${file}\" cannot be compressed."
+		fi
+		if [ -f "$file" ]; then
+			rm -v "$file"
+		fi
+	fi
+done
+find . -type d | while IFS= read -r folder; do
+	if [ -d "$folder" ]; then
+		rmdir -p "$folder" 2>/dev/null
+	fi
+done
+#cat ../fileHashes.tsv
+tar cf ../pages-build-br.tar .
+echo "Built precompressed Brotli files: $(wc -c ../pages-build-br.tar | cut -d' ' -f1) B"
+cd ..
+rm -r book-br
 exit
